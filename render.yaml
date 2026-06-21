@@ -1,0 +1,15 @@
+# One-click deploy on Render — https://render.com
+# New > Blueprint > connect this repo. Render builds the Dockerfile and gives a
+# public URL. Render injects $PORT automatically; app.py already reads it.
+services:
+  - type: web
+    name: lumen
+    runtime: docker
+    plan: free          # free tier sleeps when idle; bump to "starter" for always-on
+    healthCheckPath: /
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      # Optional: reuse a browser login for gated content (see README).
+      # - key: LUMEN_COOKIES_BROWSER
+      #   value: chrome
