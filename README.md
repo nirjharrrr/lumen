@@ -5,6 +5,16 @@ A self-hosted media downloader with a clean web UI. Paste a link from YouTube, I
 ![Python](https://img.shields.io/badge/python-3.9+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+### Run your own in one click
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/nirjharrrr/lumen)
+
+One click gives you your own private instance on Render's free tier — your own IP
+and quota, no shared limits. **Note:** YouTube and Instagram often block cloud
+(datacenter) IPs, so a cloud instance is less reliable for those two than running
+Lumen locally on your own machine. For the most reliable experience, run it
+locally (see Quick Start) — it works on your home IP.
+
 ## Features
 
 - **Three download modes**
