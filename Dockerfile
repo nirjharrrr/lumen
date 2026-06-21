@@ -6,17 +6,26 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # deno is the JS runtime yt-dlp uses to solve YouTube's signature / "n" challenges.
-# Without it, YouTube downloads get throttled and lose high-quality formats.
-RUN curl -fsSL https://deno.land/install.sh | sh
-ENV PATH="/root/.deno/bin:${PATH}"
+# Install to /usr/local so it's on PATH for the non-root runtime user below.
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
+
+# Hugging Face Spaces run the container as UID 1000 — create that user and make
+# the app dir writable (downloads/, the EJS solver cache, etc.). Also fine on Render.
+RUN useradd -m -u 1000 user
 
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+RUN mkdir -p /app/downloads && chown -R user:user /app
 
-# Hosts (Render/Railway/Fly/Cloud Run) inject $PORT; default to 8899 locally.
+USER user
+ENV HOME=/home/user \
+    PATH=/usr/local/bin:$PATH \
+    HOST=0.0.0.0 \
+    PORT=8899
+
+# Hosts that inject $PORT (Render/Railway) are honored by app.py; HF uses app_port.
 EXPOSE 8899
-ENV HOST=0.0.0.0
 CMD ["python", "app.py"]
