@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lumen — A workspace for media from anywhere</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Newsreader:ital,opsz@1,18..72&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#F7F5F2; --surface:#FFFFFF; --border:rgba(17,17,17,0.08); --border-strong:rgba(17,17,17,0.14);
+      --fg:#111111; --muted:#78716C; --faint:#A8A29E; --accent:#F26A2E; --accent-soft:rgba(242,106,46,0.10);
+      --shadow:0 1px 2px rgba(17,17,17,0.04), 0 10px 30px rgba(17,17,17,0.07);
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--fg); -webkit-font-smoothing:antialiased; letter-spacing:-0.01em; line-height:1.5; }
+    a { color:inherit; text-decoration:none; }
+    ::selection { background:var(--accent-soft); }
+    .wrap { max-width:1040px; margin:0 auto; padding:0 28px; }
+
+    nav { display:flex; align-items:center; padding:22px 0; }
+    .logo { font-family:'Newsreader',serif; font-style:italic; font-size:1.5rem; letter-spacing:-0.02em; }
+    .logo b { font-style:normal; font-weight:400; } .logo .o { color:var(--accent); }
+    nav .links { margin-left:auto; display:flex; gap:28px; align-items:center; font-size:0.88rem; color:var(--muted); }
+    nav .links a:hover { color:var(--fg); }
+    .btn { display:inline-block; padding:9px 18px; border-radius:10px; font-weight:550; font-size:0.86rem; transition:.15s; }
+    .btn-dark { background:var(--fg); color:var(--bg); } .btn-dark:hover { opacity:.88; }
+
+    .hero { text-align:center; padding:78px 0 30px; }
+    .eyebrow { display:inline-block; font-size:0.76rem; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--accent); background:var(--accent-soft); padding:6px 14px; border-radius:30px; margin-bottom:26px; }
+    h1 { font-family:'Newsreader',serif; font-weight:400; font-size:4rem; line-height:1.04; letter-spacing:-0.02em; margin-bottom:20px; }
+    h1 em { font-style:italic; color:var(--accent); }
+    .sub { font-size:1.18rem; color:var(--muted); max-width:560px; margin:0 auto 38px; line-height:1.55; }
+
+    .input-wrap { max-width:720px; margin:0 auto; position:relative; }
+    .uinput { width:100%; height:64px; background:var(--surface); border:1px solid var(--border-strong); border-radius:16px; padding:0 60px 0 22px; font-family:inherit; font-size:1.04rem; color:var(--fg); box-shadow:var(--shadow); outline:none; transition:.15s; }
+    .uinput::placeholder { color:var(--faint); }
+    .uinput:focus { border-color:var(--accent); box-shadow:0 0 0 4px var(--accent-soft), var(--shadow); }
+    .go { position:absolute; right:10px; top:10px; width:44px; height:44px; border-radius:11px; background:var(--fg); color:var(--bg); border:none; display:grid; place-items:center; cursor:pointer; transition:.15s; }
+    .go:hover { opacity:.85; } .go svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; }
+    .micro { margin-top:14px; font-size:0.82rem; color:var(--faint); }
+
+    .platforms { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:42px auto 0; max-width:740px; }
+    .plat { font-size:0.8rem; color:var(--muted); padding:7px 14px; border:1px solid var(--border); border-radius:30px; background:var(--surface); }
+
+    .section { padding:80px 0; }
+    .section-eyebrow { font-size:0.78rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); text-align:center; margin-bottom:12px; }
+    .section h2 { font-family:'Newsreader',serif; font-weight:400; font-size:2.4rem; text-align:center; letter-spacing:-0.02em; margin-bottom:52px; }
+    .features { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+    .feature { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:26px; box-shadow:var(--shadow); }
+    .feature .ic { width:38px; height:38px; border-radius:10px; background:var(--accent-soft); display:grid; place-items:center; color:var(--accent); margin-bottom:16px; }
+    .feature .ic svg { width:19px; height:19px; stroke:currentColor; fill:none; stroke-width:1.7; }
+    .feature h3 { font-size:1.04rem; font-weight:600; margin-bottom:7px; }
+    .feature p { font-size:0.9rem; color:var(--muted); line-height:1.55; }
+
+    .pricing { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; max-width:900px; margin:0 auto; }
+    .price { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:30px 26px; box-shadow:var(--shadow); display:flex; flex-direction:column; }
+    .price.featured { border-color:var(--accent); position:relative; }
+    .price.featured::after { content:'Popular'; position:absolute; top:-11px; left:50%; transform:translateX(-50%); background:var(--accent); color:#fff; font-size:0.68rem; font-weight:700; letter-spacing:.04em; padding:4px 12px; border-radius:20px; text-transform:uppercase; }
+    .price .tier { font-weight:600; font-size:1.05rem; }
+    .price .amt { font-family:'Newsreader',serif; font-size:2.6rem; margin:14px 0 4px; }
+    .price .amt span { font-family:'Inter'; font-size:0.9rem; color:var(--faint); }
+    .price ul { list-style:none; margin:20px 0 24px; display:flex; flex-direction:column; gap:10px; }
+    .price li { font-size:0.88rem; color:var(--muted); display:flex; gap:9px; }
+    .price li::before { content:'✓'; color:var(--accent); font-weight:700; }
+    .price .btn { text-align:center; margin-top:auto; }
+    .btn-soft { background:var(--accent-soft); color:var(--accent); } .btn-soft:hover { background:var(--accent); color:#fff; }
+    .btn-outline { border:1px solid var(--border-strong); color:var(--fg); } .btn-outline:hover { border-color:var(--fg); }
+
+    footer { border-top:1px solid var(--border); padding:36px 0; text-align:center; color:var(--faint); font-size:0.84rem; }
+
+    @media (max-width:780px){ h1{font-size:2.8rem;} .features,.pricing{grid-template-columns:1fr;} nav .links a:not(.btn){display:none;} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <div class="logo"><b>Lu</b><span class="o">men</span></div>
+      <div class="links">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a class="btn btn-dark" href="/app">Open Lumen</a>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <span class="eyebrow">Media, organized</span>
+      <h1>Download anything.<br>From <em>anywhere</em>.</h1>
+      <p class="sub">One URL bar for the entire internet. Lumen pulls video, audio, images, and whole galleries — then keeps them organized like a workspace, not a downloads folder.</p>
+      <form class="input-wrap" onsubmit="return openApp(event)">
+        <input id="u" class="uinput" placeholder="Paste a YouTube, Instagram, X, Pinterest link…" autocomplete="off">
+        <button class="go" type="submit" aria-label="Go"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+      </form>
+      <div class="micro">Free · No login · No watermarks</div>
+      <div class="platforms">
+        <span class="plat">YouTube</span><span class="plat">Instagram</span><span class="plat">TikTok</span>
+        <span class="plat">X / Twitter</span><span class="plat">Pinterest</span><span class="plat">Reddit</span>
+        <span class="plat">Loom</span><span class="plat">SoundCloud</span><span class="plat">Vimeo</span><span class="plat">+ 1000 more</span>
+      </div>
+    </header>
+
+    <section class="section" id="features">
+      <div class="section-eyebrow">Why Lumen</div>
+      <h2>Not a downloader. A workspace.</h2>
+      <div class="features">
+        <div class="feature"><div class="ic"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></div><h3>One universal input</h3><p>Paste anything. Lumen detects the source, shows your options inline, and adapts — no menus, no friction.</p></div>
+        <div class="feature"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></div><h3>Collections</h3><p>Save into boards like Pinterest. Design inspiration, research, podcast assets — your media, finally organized.</p></div>
+        <div class="feature"><div class="ic"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div><h3>Whole galleries, zipped</h3><p>Carousels, threads, albums — every photo and video bundled into one clean ZIP, with captions and subtitles.</p></div>
+        <div class="feature"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><h3>Live activity</h3><p>Real-time progress, a full history timeline, and an Arc-style inspector for every file you've pulled.</p></div>
+        <div class="feature"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4"/></svg></div><h3>AI actions <small style="color:var(--faint);font-weight:500">soon</small></h3><p>Summarize a video, extract a transcript, turn a clip into notes, translate, or pull highlights — one click.</p></div>
+        <div class="feature"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><h3>Free &amp; private</h3><p>No account, no watermark, no paid API. Public content just works; your library stays on your machine.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="pricing">
+      <div class="section-eyebrow">Pricing</div>
+      <h2>Start free. Grow when ready.</h2>
+      <div class="pricing">
+        <div class="price">
+          <div class="tier">Free</div>
+          <div class="amt">$0</div>
+          <ul><li>Unlimited downloads</li><li>Video, audio &amp; galleries</li><li>Collections &amp; history</li><li>1000+ platforms</li></ul>
+          <a class="btn btn-outline" href="/app">Open Lumen</a>
+        </div>
+        <div class="price featured">
+          <div class="tier">Pro</div>
+          <div class="amt">$6<span>/mo</span></div>
+          <ul><li>Everything in Free</li><li>AI actions &amp; transcripts</li><li>Cloud library &amp; sync</li><li>Priority speed</li></ul>
+          <a class="btn btn-soft" href="/app">Coming soon</a>
+        </div>
+        <div class="price">
+          <div class="tier">Teams</div>
+          <div class="amt">$20<span>/mo</span></div>
+          <ul><li>Everything in Pro</li><li>Shared collections</li><li>API access</li><li>Admin controls</li></ul>
+          <a class="btn btn-outline" href="/app">Coming soon</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>Lumen — built on open source · MIT licensed · Respect copyright and platform terms.</footer>
+
+  <script>
+    function openApp(e){ e.preventDefault(); const u=document.getElementById('u').value.trim(); location.href='/app'+(u?('?url='+encodeURIComponent(u)):''); return false; }
+  </script>
+</body>
+</html>

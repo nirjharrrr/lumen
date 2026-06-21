@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import time
 import uuid
 import glob
 import json
@@ -9,6 +10,9 @@ import hashlib
 import zipfile
 import subprocess
 import threading
+from collections import deque
+from datetime import datetime, timezone
+from urllib.parse import urlparse
 from flask import Flask, request, jsonify, send_file, render_template
 
 
@@ -24,10 +28,82 @@ BASE_DIR = os.path.dirname(__file__)
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 INFO_CACHE_DIR = os.path.join(DOWNLOAD_DIR, ".info")
 COOKIES_FILE = os.path.join(BASE_DIR, ".cookies", "cookies.txt")
+LUMEN_DIR = os.path.join(BASE_DIR, ".lumen")
+HISTORY_FILE = os.path.join(LUMEN_DIR, "history.json")
+COLLECTIONS_FILE = os.path.join(LUMEN_DIR, "collections.json")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(INFO_CACHE_DIR, exist_ok=True)
+os.makedirs(LUMEN_DIR, exist_ok=True)
 
 jobs = {}
+_store_lock = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# Persistence: completed downloads (history) and user collections survive
+# restarts in small JSON files under .lumen/.
+# ---------------------------------------------------------------------------
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _domain(url):
+    try:
+        host = urlparse(url).netloc.lower()
+        return host[4:] if host.startswith("www.") else host
+    except ValueError:
+        return ""
+
+
+def _load(path, default):
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return default
+
+
+def _save(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(data, fh)
+    os.replace(tmp, path)
+
+
+def _history_all():
+    return _load(HISTORY_FILE, [])
+
+
+def _history_add(entry):
+    with _store_lock:
+        items = _load(HISTORY_FILE, [])
+        items.insert(0, entry)
+        _save(HISTORY_FILE, items[:1000])
+
+
+def _record_history(job_id, type_, fmt):
+    """Append a completed download to history (best-effort — never break a job)."""
+    try:
+        job = jobs.get(job_id, {})
+        path = job.get("file")
+        size = os.path.getsize(path) if path and os.path.exists(path) else 0
+        _history_add({
+            "id": job_id,
+            "title": job.get("title") or job.get("filename") or "Untitled",
+            "url": job.get("url", ""),
+            "source": _domain(job.get("url", "")),
+            "type": type_,
+            "format": fmt,
+            "resolution": job.get("resolution", ""),
+            "thumbnail": job.get("thumbnail", ""),
+            "size": size,
+            "filename": job.get("filename", ""),
+            "date": _now_iso(),
+            "collection": None,
+            "tags": [],
+        })
+    except Exception:
+        pass
 
 # YouTube (and others) now require solving JS signature / "n" challenges to avoid
 # throttling and missing formats. yt-dlp does this via the EJS solver, which must be
@@ -94,14 +170,46 @@ def _friendly_login_hint(stderr):
     return None
 
 
+_PCT_RE = re.compile(r"(\d{1,3}(?:\.\d)?)%")
+
+
+def _stream_run(cmd, job, timeout=300):
+    """Run a command, parse download percentages live into job['progress'], and
+    enforce a timeout with a watchdog. Returns (returncode, tail_output)."""
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1,
+    )
+    tail = deque(maxlen=25)
+    timer = threading.Timer(timeout, proc.kill)
+    timer.start()
+    try:
+        for line in proc.stdout:
+            line = line.rstrip()
+            if not line:
+                continue
+            tail.append(line)
+            m = _PCT_RE.search(line)
+            if m:
+                try:
+                    job["progress"] = min(99.0, float(m.group(1)))
+                except ValueError:
+                    pass
+    finally:
+        timer.cancel()
+        proc.wait()
+    return proc.returncode, "\n".join(tail)
+
+
 # ===========================================================================
-# Single-file video / audio download (fast path) — unchanged behaviour.
+# Single-file video / audio download (fast path).
 # ===========================================================================
 def run_download(job_id, url, format_choice, format_id):
     job = jobs[job_id]
+    job["progress"] = 0
     out_template = os.path.join(DOWNLOAD_DIR, f"{job_id}.%(ext)s")
 
-    cmd = YTDLP_BASE + SPEED_FLAGS + cookie_flags() + ["-o", out_template]
+    cmd = YTDLP_BASE + SPEED_FLAGS + cookie_flags() + ["--newline", "-o", out_template]
 
     if format_choice == "audio":
         cmd += ["-x", "--audio-format", "mp3"]
@@ -119,13 +227,14 @@ def run_download(job_id, url, format_choice, format_id):
     attempt = cmd + (["--load-info-json", info_path, url] if used_info_json else [url])
 
     try:
-        result = subprocess.run(attempt, capture_output=True, text=True, timeout=300)
+        rc, out = _stream_run(attempt, job)
         # Cached info can have stale/expired URLs — retry once with a fresh extraction.
-        if result.returncode != 0 and used_info_json:
-            result = subprocess.run(cmd + [url], capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
+        if rc != 0 and used_info_json:
+            job["progress"] = 0
+            rc, out = _stream_run(cmd + [url], job)
+        if rc != 0:
             job["status"] = "error"
-            job["error"] = _friendly_login_hint(result.stderr) or result.stderr.strip().split("\n")[-1]
+            job["error"] = _friendly_login_hint(out) or (out.strip().split("\n")[-1] if out else "Download failed")
             return
 
         files = glob.glob(os.path.join(DOWNLOAD_DIR, f"{job_id}.*"))
@@ -147,14 +256,14 @@ def run_download(job_id, url, format_choice, format_id):
                 except OSError:
                     pass
 
-        job["status"] = "done"
-        job["file"] = chosen
         ext = os.path.splitext(chosen)[1]
         safe_title = _safe_name(job.get("title", ""), 40)
+        job["file"] = chosen
         job["filename"] = f"{safe_title}{ext}" if safe_title else os.path.basename(chosen)
-    except subprocess.TimeoutExpired:
-        job["status"] = "error"
-        job["error"] = "Download timed out (5 min limit)"
+        job["progress"] = 100
+        job["status"] = "done"
+        _record_history(job_id, "audio" if format_choice == "audio" else "video",
+                        "MP3" if format_choice == "audio" else "MP4")
     except Exception as e:
         job["status"] = "error"
         job["error"] = str(e)
@@ -202,6 +311,7 @@ def _collect_metadata(workdir, url, title):
 def run_bundle(job_id, url, opts):
     """opts: dict with booleans media/thumbnail/metadata/subtitles."""
     job = jobs[job_id]
+    job["progress"] = 5
     workdir = os.path.join(DOWNLOAD_DIR, f"{job_id}_work")
     if os.path.exists(workdir):
         shutil.rmtree(workdir, ignore_errors=True)
@@ -224,6 +334,7 @@ def run_bundle(job_id, url, opts):
                 errors.append(("gallery-dl", r.stderr))
         except subprocess.TimeoutExpired:
             errors.append(("gallery-dl", "timed out"))
+        job["progress"] = 45
 
         # Did gallery-dl already pull the media? If so, yt-dlp must NOT re-download the
         # video (the two tools encode differently, so the bytes differ and content-hash
@@ -258,6 +369,7 @@ def run_bundle(job_id, url, opts):
                 errors.append(("yt-dlp", r.stderr))
         except subprocess.TimeoutExpired:
             errors.append(("yt-dlp", "timed out"))
+        job["progress"] = 80
 
         # --- 3. Build readable metadata, then drop raw json sidecars -----------
         if want_meta:
@@ -330,17 +442,24 @@ def run_bundle(job_id, url, opts):
         if want_meta and os.path.exists(os.path.join(workdir, "metadata.txt")):
             final.append(os.path.join(workdir, "metadata.txt"))
 
+        # Classify the bundle: all-images -> "images", otherwise "bundle".
+        all_images = all(os.path.splitext(p)[1].lower() in IMAGE_EXTS for p in unique_media)
+        kind = "images" if (unique_media and all_images) else "bundle"
+
         # --- 6. Single media item + nothing else? skip the zip -----------------
         media_only = want_thumb is False and want_subs is False and want_meta is False
         if len(final) == 1 and media_only:
-            job["status"] = "done"
             job["file"] = final[0]
             safe_title = _safe_name(job.get("title", ""), 40)
             ext = os.path.splitext(final[0])[1]
             job["filename"] = f"{safe_title}{ext}" if safe_title else os.path.basename(final[0])
+            job["progress"] = 100
+            job["status"] = "done"
+            _record_history(job_id, kind, ext.lstrip(".").upper() or "FILE")
             return
 
         # --- 7. Zip everything -------------------------------------------------
+        job["progress"] = 90
         zip_path = os.path.join(DOWNLOAD_DIR, f"{job_id}.zip")
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for path in final:
@@ -348,10 +467,12 @@ def run_bundle(job_id, url, opts):
                     zf.write(path, os.path.basename(path))
 
         safe_title = _safe_name(job.get("title", ""), 40) or "lumen"
-        job["status"] = "done"
         job["file"] = zip_path
         job["filename"] = f"{safe_title}.zip"
         job["item_count"] = len(unique_media)
+        job["progress"] = 100
+        job["status"] = "done"
+        _record_history(job_id, kind, "ZIP")
     except Exception as e:
         job["status"] = "error"
         job["error"] = str(e)
@@ -401,11 +522,6 @@ def _gallerydl_info(url):
         "count": count,
         "is_gallery": count > 1,
     }, None
-
-
-@app.route("/")
-def index():
-    return render_template("index.html")
 
 
 @app.route("/api/info", methods=["POST"])
@@ -481,7 +597,11 @@ def start_download():
         return jsonify({"error": "No URL provided"}), 400
 
     job_id = uuid.uuid4().hex[:10]
-    jobs[job_id] = {"status": "downloading", "url": url, "title": title}
+    jobs[job_id] = {
+        "status": "downloading", "url": url, "title": title, "progress": 0,
+        "thumbnail": data.get("thumbnail", ""), "resolution": data.get("resolution", ""),
+        "format_choice": format_choice,
+    }
 
     if format_choice == "all":
         opts = data.get("bundle") or {
@@ -508,15 +628,98 @@ def check_status(job_id):
         "error": job.get("error"),
         "filename": job.get("filename"),
         "item_count": job.get("item_count"),
+        "progress": job.get("progress", 0),
     })
 
 
 @app.route("/api/file/<job_id>")
 def download_file(job_id):
     job = jobs.get(job_id)
-    if not job or job["status"] != "done":
-        return jsonify({"error": "File not ready"}), 404
-    return send_file(job["file"], as_attachment=True, download_name=job["filename"])
+    if job and job.get("status") == "done":
+        return send_file(job["file"], as_attachment=True, download_name=job["filename"])
+    # Fallback: the in-memory job is gone (server restarted) but the file remains.
+    matches = [m for m in glob.glob(os.path.join(DOWNLOAD_DIR, f"{job_id}.*"))
+               if not m.endswith((".part", ".ytdl", ".tmp"))]
+    if matches:
+        name = next((e["filename"] for e in _history_all() if e["id"] == job_id), None)
+        return send_file(matches[0], as_attachment=True,
+                         download_name=name or os.path.basename(matches[0]))
+    return jsonify({"error": "File not ready"}), 404
+
+
+# ===========================================================================
+# Workspace data — history (activity) and collections.
+# ===========================================================================
+@app.route("/api/history")
+def api_history():
+    return jsonify({"items": _history_all()})
+
+
+@app.route("/api/history/<item_id>", methods=["DELETE"])
+def api_history_delete(item_id):
+    with _store_lock:
+        items = _load(HISTORY_FILE, [])
+        items = [e for e in items if e["id"] != item_id]
+        _save(HISTORY_FILE, items)
+    # Best-effort remove the file from disk too.
+    for m in glob.glob(os.path.join(DOWNLOAD_DIR, f"{item_id}.*")):
+        try:
+            os.remove(m)
+        except OSError:
+            pass
+    return jsonify({"ok": True})
+
+
+@app.route("/api/history/<item_id>/collection", methods=["POST"])
+def api_assign_collection(item_id):
+    name = (request.json or {}).get("collection")
+    with _store_lock:
+        items = _load(HISTORY_FILE, [])
+        for e in items:
+            if e["id"] == item_id:
+                e["collection"] = name or None
+                break
+        _save(HISTORY_FILE, items)
+        if name:
+            cols = _load(COLLECTIONS_FILE, [])
+            if name not in [c["name"] for c in cols]:
+                cols.append({"name": name, "created": _now_iso()})
+                _save(COLLECTIONS_FILE, cols)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/collections", methods=["GET", "POST"])
+def api_collections():
+    if request.method == "POST":
+        name = (request.json or {}).get("name", "").strip()
+        if not name:
+            return jsonify({"error": "Name required"}), 400
+        with _store_lock:
+            cols = _load(COLLECTIONS_FILE, [])
+            if name not in [c["name"] for c in cols]:
+                cols.append({"name": name, "created": _now_iso()})
+                _save(COLLECTIONS_FILE, cols)
+        return jsonify({"ok": True})
+
+    cols = _load(COLLECTIONS_FILE, [])
+    history = _history_all()
+    counts = {}
+    for e in history:
+        if e.get("collection"):
+            counts[e["collection"]] = counts.get(e["collection"], 0) + 1
+    out = [{"name": c["name"], "count": counts.get(c["name"], 0), "created": c.get("created")}
+           for c in cols]
+    return jsonify({"items": out})
+
+
+@app.route("/")
+def landing():
+    return render_template("landing.html")
+
+
+@app.route("/app")
+def dashboard():
+    return render_template("app.html")
 
 
 if __name__ == "__main__":
