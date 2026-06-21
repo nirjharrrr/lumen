@@ -1,66 +1,111 @@
-# ReClip
+# Lumen
 
-A self-hosted, open-source video and audio downloader with a clean web UI. Paste links from YouTube, TikTok, Instagram, Twitter/X, and 1000+ other sites — download as MP4 or MP3.
+A self-hosted media downloader with a clean web UI. Paste a link from YouTube, Instagram, Pinterest, Twitter/X, Loom, Reddit, TikTok, and 1000+ other sites — grab it as **video (MP4)**, **audio (MP3)**, or **everything in the post as a ZIP** (all photos *and* videos in a carousel, plus thumbnail, captions, and subtitles).
 
-![Python](https://img.shields.io/badge/python-3.8+-blue)
+![Python](https://img.shields.io/badge/python-3.9+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-
-https://github.com/user-attachments/assets/419d3e50-c933-444b-8cab-a9724986ba05
-
-![ReClip MP3 Mode](assets/preview-mp3.png)
 
 ## Features
 
-- Download videos from 1000+ supported sites (via [yt-dlp](https://github.com/yt-dlp/yt-dlp))
-- MP4 video or MP3 audio extraction
-- Quality/resolution picker
-- Bulk downloads — paste multiple URLs at once
-- Automatic URL deduplication
-- Clean, responsive UI — no frameworks, no build step
-- Single Python file backend (~150 lines)
+- **Three download modes**
+  - **MP4** — best-quality video, with a resolution picker
+  - **MP3** — audio-only extraction
+  - **ALL · ZIP** — *everything* in a post: every photo and video (full Instagram/Reddit-style carousels), plus thumbnail, captions/metadata, and subtitles, bundled into a single ZIP
+- **Multi-platform** — video via [yt-dlp](https://github.com/yt-dlp/yt-dlp), images & galleries via [gallery-dl](https://github.com/mikf/gallery-dl); Lumen picks the right engine per site and de-dupes overlap
+- **Fast** — HLS pulled in one ffmpeg connection, parallel fragment downloads, and metadata reuse so slow extractors (X, Instagram) aren't run twice
+- **Bulk** — paste multiple URLs at once; automatic de-duplication
+- **Carousel-aware** — shows an item count and bundles all of it
+- **Free private-content auth** — optionally reuse your own browser's login (no paid API) for rate-limited or gated content
+- **No build step** — vanilla HTML/CSS/JS frontend, single-file Flask backend
+
+## Requirements
+
+- **Python 3.9+**
+- **ffmpeg** — stream merging/muxing
+- **deno** (or node) — JS runtime yt-dlp uses to solve YouTube's signature challenges (without it, YouTube throttles and drops high-quality formats)
+- Python packages (auto-installed into a venv on first run): `flask`, `yt-dlp`, `gallery-dl`
 
 ## Quick Start
 
 ```bash
-brew install yt-dlp ffmpeg    # or apt install ffmpeg && pip install yt-dlp
-git clone https://github.com/averygan/reclip.git
-cd reclip
-./reclip.sh
+# macOS
+brew install python ffmpeg deno
+
+# Debian/Ubuntu
+# sudo apt install python3 python3-venv ffmpeg
+# curl -fsSL https://deno.land/install.sh | sh
+
+git clone https://github.com/nirjharrrr/lumen.git
+cd lumen
+./lumen.sh
 ```
+
+`lumen.sh` sets up a virtualenv, installs the Python dependencies, keeps the downloaders up to date in the background, and starts the server.
 
 Open **http://localhost:8899**.
 
-Or with Docker:
+### Docker
 
 ```bash
-docker build -t reclip . && docker run -p 8899:8899 reclip
+docker build -t lumen .
+docker run -p 8899:8899 lumen
 ```
+
+The image bundles ffmpeg, deno, and all Python deps.
 
 ## Usage
 
-1. Paste one or more video URLs into the input box
-2. Choose **MP4** (video) or **MP3** (audio)
-3. Click **Fetch** to load video info and thumbnails
-4. Select quality/resolution if available
-5. Click **Download** on individual videos, or **Download All**
+1. Paste one or more URLs into the input box.
+2. Choose **MP4**, **MP3**, or **ALL · ZIP**.
+3. Click **Fetch** to load info and thumbnails.
+4. Pick a resolution (MP4 mode) if offered.
+5. Click **Download** — single files download directly; ALL mode produces a ZIP.
+
+## Private / login-gated content (optional, free)
+
+Public content needs no login. For content that's only visible when signed in
+(private Instagram accounts, your feed/stories, age-gated videos), Lumen can
+reuse a browser where **you are already logged in** — no paid service, no
+credentials stored by Lumen. Pick one:
+
+```bash
+# Read cookies straight from your installed browser:
+LUMEN_COOKIES_BROWSER=chrome ./lumen.sh   # or safari | firefox | edge | brave
+```
+
+…or export a `cookies.txt` (via a browser "cookies.txt" extension) to
+`.cookies/cookies.txt`. Without either, public posts still work and gated ones
+return a clear hint instead of failing silently.
+
+> There is no way to download content that requires a login *without* a login —
+> that's enforced by the platforms, not by Lumen.
 
 ## Supported Sites
 
-Anything [yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), including:
-
-YouTube, TikTok, Instagram, Twitter/X, Reddit, Facebook, Vimeo, Twitch, Dailymotion, SoundCloud, Loom, Streamable, Pinterest, Tumblr, Threads, LinkedIn, and many more.
+Video from anything [yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md); images & galleries from anything [gallery-dl supports](https://github.com/mikf/gallery-dl/blob/master/docs/supportedsites.md). Includes YouTube, Instagram, Pinterest, Twitter/X, Reddit, TikTok, Facebook, Vimeo, Twitch, Dailymotion, SoundCloud, Loom, Streamable, Tumblr, Threads, and many more.
 
 ## Stack
 
-- **Backend:** Python + Flask (~150 lines)
+- **Backend:** Python + Flask (single file)
 - **Frontend:** Vanilla HTML/CSS/JS (single file, no build step)
-- **Download engine:** [yt-dlp](https://github.com/yt-dlp/yt-dlp) + [ffmpeg](https://ffmpeg.org/)
-- **Dependencies:** 2 (Flask, yt-dlp)
+- **Engines:** [yt-dlp](https://github.com/yt-dlp/yt-dlp) · [gallery-dl](https://github.com/mikf/gallery-dl) · [ffmpeg](https://ffmpeg.org/) · [deno](https://deno.land/)
+
+## Deployment
+
+Lumen is a long-running Flask server that shells out to `yt-dlp`, `gallery-dl`,
+and `ffmpeg`, and writes files to disk. It needs a **container/VPS host**, not a
+static or serverless platform. Use the included `Dockerfile` on Render, Railway,
+Fly.io, Google Cloud Run, or any Docker host. (Static/JAMstack hosts like Netlify
+or GitHub Pages cannot run it.)
+
+> Note: cloud/datacenter IPs are frequently blocked or CAPTCHA-gated by YouTube
+> and Instagram, so a hosted instance can be less reliable than running locally.
 
 ## Disclaimer
 
-This tool is intended for personal use only. Please respect copyright laws and the terms of service of the platforms you download from. The developers are not responsible for any misuse of this tool.
+For personal use. Respect copyright and the terms of service of the platforms you
+download from. The authors are not responsible for misuse.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — built on the open-source ReClip project.

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ReClip — Free Media Downloader</title>
+  <title>Lumen — Media Downloader</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -288,6 +288,17 @@
     }
     .q-chip:hover:not(.active) { border-color: var(--muted); }
 
+    .gallery-badge {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(228,99,46,0.10);
+      color: var(--accent);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
     /* Error card */
     .card.card-error {
       border-color: rgba(196, 61, 61, 0.2);
@@ -383,8 +394,8 @@
 <body>
   <div class="page">
     <div class="brand">
-      <h1>Re<em>Clip</em></h1>
-      <p>Free media downloader</p>
+      <h1>Lu<em>men</em></h1>
+      <p>Media downloader — video, audio &amp; full galleries</p>
     </div>
 
     <textarea id="urls" placeholder="Paste one or more URLs..." rows="2"></textarea>
@@ -394,6 +405,7 @@
       <div class="pill-group">
         <button class="pill active" data-format="video" onclick="setFormat(this)">MP4</button>
         <button class="pill" data-format="audio" onclick="setFormat(this)">MP3</button>
+        <button class="pill" data-format="all" onclick="setFormat(this)" title="Download everything — all photos &amp; videos, thumbnail, captions and subtitles, bundled as a ZIP">ALL · ZIP</button>
       </div>
       <button class="fetch-btn" id="goBtn" onclick="go()">Fetch</button>
     </div>
@@ -415,6 +427,8 @@
       document.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentFormat = btn.dataset.format;
+      // Re-render so each card reflects the new mode (quality chips, ZIP labels, etc.)
+      cardData.forEach((_, i) => renderCard(i));
     }
 
     function parseUrls(text) {
@@ -486,6 +500,7 @@
               duration: data.duration,
               uploader: data.uploader || '',
               formats: data.formats || [],
+              count: data.count || 1,
               selectedFormatId: data.formats?.[0]?.id || null,
             };
           }
@@ -547,6 +562,7 @@
       // Ready / downloading / done / error states
       el.className = 'card';
       const isAudio = currentFormat === 'audio';
+      const isAll = currentFormat === 'all';
 
       let thumbHtml;
       if (isAudio) {
@@ -557,18 +573,26 @@
         thumbHtml = `<div class="no-thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>`;
       }
 
+      // Quality chips only make sense for single-video mode (not audio, not ZIP bundle).
       let qualityChips = '';
-      if (!isAudio && c.formats && c.formats.length > 1) {
+      if (!isAudio && !isAll && c.formats && c.formats.length > 1) {
         qualityChips = c.formats.map(f =>
           `<button class="q-chip${f.id === c.selectedFormatId ? ' active' : ''}" onclick="pickFormat(${idx}, '${f.id}')">${f.label}</button>`
         ).join('');
       }
 
+      // Gallery / carousel badge — show how many items the ZIP will contain.
+      const gallery = c.count && c.count > 1;
+      const galleryBadge = (isAll && gallery)
+        ? `<span class="gallery-badge">⊞ ${c.count} items → ZIP</span>` : '';
+
       let actionHtml = '';
       if (c.status === 'ready') {
-        actionHtml = `<button class="card-dl-btn" onclick="dlCard(${idx})">Download</button>${qualityChips}`;
+        const label = isAll ? (gallery ? 'Download ZIP' : 'Download All') : 'Download';
+        actionHtml = `<button class="card-dl-btn" onclick="dlCard(${idx})">${label}</button>${galleryBadge}${qualityChips}`;
       } else if (c.status === 'downloading') {
-        actionHtml = `<span class="card-status downloading"><span class="spin"></span> Downloading...</span>`;
+        const msg = isAll ? 'Bundling...' : 'Downloading...';
+        actionHtml = `<span class="card-status downloading"><span class="spin"></span> ${msg}</span>`;
       } else if (c.status === 'done') {
         actionHtml = `<button class="card-dl-btn done" onclick="saveCard(${idx})">Save</button>
           <span class="card-status done">${esc(c.filename || '')}</span>`;
