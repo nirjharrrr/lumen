@@ -650,8 +650,20 @@ def download_file(job_id):
 # ===========================================================================
 # Workspace data — history (activity) and collections.
 # ===========================================================================
-@app.route("/api/history")
+@app.route("/api/history", methods=["GET", "DELETE"])
 def api_history():
+    if request.method == "DELETE":  # clear entire library
+        with _store_lock:
+            items = _load(HISTORY_FILE, [])
+            ids = [e["id"] for e in items]
+            _save(HISTORY_FILE, [])
+        for jid in ids:
+            for m in glob.glob(os.path.join(DOWNLOAD_DIR, f"{jid}.*")):
+                try:
+                    os.remove(m)
+                except OSError:
+                    pass
+        return jsonify({"ok": True})
     return jsonify({"items": _history_all()})
 
 
@@ -713,10 +725,6 @@ def api_collections():
 
 
 @app.route("/")
-def landing():
-    return render_template("landing.html")
-
-
 @app.route("/app")
 def dashboard():
     return render_template("app.html")
