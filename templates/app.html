@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lumen</title>
-  <link rel="icon" href="/static/lumen-logo.png">
+  <link rel="icon" href="/static/lumen-logo.png?v=5">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -30,9 +30,9 @@
     ::selection{background:var(--accent-soft)}
     ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:8px;border:3px solid transparent;background-clip:content-box}
     .app{display:grid;grid-template-columns:var(--side-w) 1fr var(--queue-w);height:100vh;overflow:hidden}
-    .logo-img{height:26px;width:auto;display:block;margin:6px 11px 30px;filter:invert(1)}
+    .logo-img{height:20px;width:auto;display:block;margin:6px 11px 28px;filter:invert(1)}
     [data-theme="light"] .logo-img{filter:none}
-    .logo-text{font-weight:800;font-size:1.4rem;letter-spacing:-0.05em;margin:6px 11px 30px;display:block}
+    .logo-text{font-weight:800;font-size:1.1rem;letter-spacing:-0.05em;margin:6px 11px 28px;display:block}
 
     .side{background:var(--side);border-right:1px solid var(--line);padding:18px 11px;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
     .nav{display:flex;align-items:center;gap:11px;padding:8px 11px;border-radius:8px;color:var(--muted);font-size:0.85rem;font-weight:500;transition:.12s}
@@ -177,7 +177,7 @@
 <body>
   <div class="app">
     <aside class="side">
-      <img class="logo-img" src="/static/lumen-logo.png" alt="lumen" onerror="this.outerHTML='<span class=&quot;logo-text&quot;>lumen</span>'">
+      <img class="logo-img" src="/static/lumen-logo.png?v=5" alt="lumen" onerror="this.outerHTML='<span class=&quot;logo-text&quot;>lumen</span>'">
       <button class="nav active" data-v="dashboard" onclick="go('dashboard')"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>
       <button class="nav" data-v="library" onclick="go('library')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>Library<span class="ct" id="ct-lib"></span></button>
       <div class="nlabel">Filter</div>
